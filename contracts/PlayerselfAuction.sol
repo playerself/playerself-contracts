@@ -101,6 +101,11 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
         require(nftAuctions[hash].nftSeller == address(0), "Auction already exists.");
         _;
     }
+
+    modifier sellerOnly(bytes32 hash) {
+        require(nftAuctions[hash].nftSeller == msg.sender, "Unauthorized.");
+        _;
+    }
     
     /** Getter **/
     function getTokensAndFees(bytes32 hash) public view returns (uint256[] memory, address[] memory, uint256[] memory) {
@@ -374,9 +379,7 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
         emit NftAuctionSettled(hash, nftAuctions[hash].nftSeller);
     }
 
-    function withdrawAuction(bytes32 hash) external {
-        require(nftAuctions[hash].nftSeller == msg.sender, "Only auction owner.");
-        
+    function withdrawAuction(bytes32 hash) external sellerOnly(hash) {
         address prevNftHighestBidder = nftAuctions[hash].nftHighestBidder;
         if (prevNftHighestBidder != address(0)) {
             _payout(prevNftHighestBidder, nftAuctions[hash].nftHighestBid);
@@ -400,8 +403,7 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
     }
     
     /** Update methods **/
-    function updateWhitelistedBuyer(bytes32 hash, address _newWhitelistedBuyer) external {
-        require(nftAuctions[hash].nftSeller == msg.sender, "Unauthorized.");
+    function updateWhitelistedBuyer(bytes32 hash, address _newWhitelistedBuyer) external sellerOnly(hash) {
         require(_isSale(hash), "Not a sale.");
         
         nftAuctions[hash].whitelistedBuyer = _newWhitelistedBuyer;
@@ -418,9 +420,7 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
         emit WhitelistedBuyerUpdated(hash, _newWhitelistedBuyer);
     }
 
-    function updateMinimumPrice(bytes32 hash, uint256 _newMinPrice) external {
-        require(nftAuctions[hash].nftSeller == msg.sender, "Unauthorized.");
-        
+    function updateMinimumPrice(bytes32 hash, uint256 _newMinPrice) external sellerOnly(hash) {        
         uint256 minPrice = nftAuctions[hash].minPrice;
         bool minBidMade = minPrice > 0 && (nftAuctions[hash].nftHighestBid >= minPrice);
         require(!minBidMade, "Minimum bid already made.");
@@ -438,8 +438,8 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
         }
     }
 
-    function updateBuyNowPrice(bytes32 hash, uint256 _newBuyNowPrice) external {
-        require(nftAuctions[hash].nftSeller == msg.sender, "Unauthorized.");
+    function updateBuyNowPrice(bytes32 hash, uint256 _newBuyNowPrice) external sellerOnly(hash) {
+        require(!_isSale(hash) || _newBuyNowPrice > 0, "Invalid new buy now price.");
         nftAuctions[hash].buyNowPrice = _newBuyNowPrice;
         emit BuyNowPriceUpdated(hash, _newBuyNowPrice);
         
@@ -449,8 +449,7 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
         }
     }
 
-    function takeHighestBid(bytes32 hash) external {
-        require(nftAuctions[hash].nftSeller == msg.sender, "Unauthorized.");
+    function takeHighestBid(bytes32 hash) external sellerOnly(hash) {
         require(nftAuctions[hash].nftHighestBid > 0, "Cannot payout 0 bid.");
         _transferNftAndPaySeller(hash);
     }
