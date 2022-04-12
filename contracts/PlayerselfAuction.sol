@@ -8,6 +8,11 @@ import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 import "./interfaces/IPlayerselfRegistry.sol";
 
 
+/**
+ * @title Playerself auctions/sales contract
+ * @author Playerself srl developers
+ * @notice This contract allows wallets to open, manage and partecipate in auctions and sales
+ */
 contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
     
     mapping(bytes32 => Auction) public nftAuctions;
@@ -38,6 +43,12 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
     address private _defaultFeeRecipient;
     uint256 private _defaultFee;
     
+    /**
+     * @notice Creates a new instance of the PlayerselfAuction contract
+     * @param _registry PlayerselfRegistry contract address
+     * @param defaultFeeRecipient default base fee recipient
+     * @param defaultFee default base fee (eg. 1% = 1e16)
+     */
     constructor(address _registry, address defaultFeeRecipient, uint256 defaultFee) {
         require(_registry != address(0), "NFT address cannot be address(0).");
         defaultBidIncreasePercentage = 1e16;
@@ -113,6 +124,21 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
     }
     
     /** Auctions **/
+
+    /**
+     * @notice Internal function used to setup an auction
+     * @dev Makes the basics checks for an auction and then sets the auction in the private mapping above
+     * @param auctionHash hash of the auction
+     * @param _nftAddress address of the NFT contract (must be registered on the PlayerselfRegistry contract)
+     * @param _tokenIds array of token ids from the NFT contract that are being sold
+     * @param _minPrice minimum price for the auction (must be greater than 0)
+     * @param _buyNowPrice instant buy now price for the auction (must be 0 or greater than the _minPrice)
+     * @param _auctionDuration duration of the auction (in seconds)
+     * @param _auctionBidPeriod period between bids (in seconds) - if the current duration is lower than this value, the auction duration is set to its auction bid period
+     * @param _bidIncreasePercentage increase percentage between bids
+     * @param _feeRecipients array with the fee recipients (index matching the fee percentages below)
+     * @param _feePercentages array with the fee percentages (index matching the fee recipients above)
+     */
     function _setupAuction(
         bytes32 auctionHash,
         address _nftAddress,
@@ -125,11 +151,14 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
         address[] memory _feeRecipients,
         uint256[] memory _feePercentages
     ) internal auctionNotExists(auctionHash) {
+        // Perform checks on the given data
         require(_minPrice > 0, "Min price must be greater than 0.");
+        require(_buyNowPrice == 0 || _buyNowPrice >= _minPrice, "Invalid buy now price.");
         require(_feeRecipients.length == _feePercentages.length, "Invalid fees.");
         require(_bidIncreasePercentage == 0 || _bidIncreasePercentage >= minimumSettableIncreasePercentage, "Bid increase percentage too low.");
         require(_auctionDuration >= defaultAuctionBidPeriod, "Invalid auction bid period.");
 
+        // Create the recipients and percentages arrays appending the default fee recipient and default fee
         address[] memory recipients = new address[](_defaultFee > 0 && _defaultFeeRecipient != address(0) ? _feeRecipients.length + 1 : _feeRecipients.length);
         uint256[] memory percentages = new uint256[](_defaultFee > 0 && _defaultFeeRecipient != address(0) ? _feeRecipients.length + 1 : _feeRecipients.length);
         for (uint i = 0; i < _feeRecipients.length; i++) {
@@ -140,7 +169,7 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
             recipients[recipients.length - 1] = _defaultFeeRecipient;
             percentages[percentages.length - 1] = _defaultFee;
         }
-
+        // Create the auction
         nftAuctions[auctionHash].nftAddress = _nftAddress;
         nftAuctions[auctionHash].tokenIds = _tokenIds;
         nftAuctions[auctionHash].auctionBidPeriod = _auctionBidPeriod != 0 ? _auctionBidPeriod : defaultAuctionBidPeriod;
@@ -151,10 +180,23 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
         nftAuctions[auctionHash].auctionEnd = uint64(block.timestamp) + _auctionDuration;
         nftAuctions[auctionHash].minPrice = _minPrice;
         nftAuctions[auctionHash].nftSeller = msg.sender;
-        
+        // Emit the event
         emit NftAuctionCreated(msg.sender, _nftAddress, auctionHash);
     }
     
+    /**
+     * @notice External function used to setup an auction
+     * @dev Calls the internal function above to setup an auction
+     * @param _nftAddress address of the NFT contract (must be registered on the PlayerselfRegistry contract)
+     * @param _tokenIds array of token ids from the NFT contract that are being sold
+     * @param _minPrice minimum price for the auction (must be greater than 0)
+     * @param _buyNowPrice instant buy now price for the auction (must be 0 or greater than the _minPrice)
+     * @param _auctionDuration duration of the auction (in seconds)
+     * @param _auctionBidPeriod period between bids (in seconds) - if the current duration is lower than this value, the auction duration is set to its auction bid period
+     * @param _bidIncreasePercentage increase percentage between bids
+     * @param _feeRecipients array with the fee recipients (index matching the fee percentages below)
+     * @param _feePercentages array with the fee percentages (index matching the fee recipients above)
+     */
     function createNftAuction(    
         address _nftAddress,   
         uint256[] memory _tokenIds,
@@ -170,6 +212,11 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
         _setupAuction(auctionHash, _nftAddress, _tokenIds, _minPrice, _buyNowPrice, _auctionDuration, _auctionBidPeriod, _bidIncreasePercentage, _feeRecipients, _feePercentages);
     }
     
+    /**
+     * @notice Internal function that updates the ongoing auction
+     * @dev Transfers the NFT and pays the seller if the buy now price is met, otherwise updates the auction end
+     * @param hash auction hash
+     */
     function _updateOngoingAuction(bytes32 hash) internal {
         uint256 buyNowPrice = nftAuctions[hash].buyNowPrice;
         bool buyNowPriceMet = buyNowPrice > 0 && nftAuctions[hash].nftHighestBid >= buyNowPrice;
