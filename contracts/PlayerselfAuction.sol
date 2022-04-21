@@ -170,32 +170,7 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
         require(_bidIncreasePercentage == 0 || _bidIncreasePercentage >= minimumSettableIncreasePercentage, "Bid increase percentage too low.");
         require(_auctionDuration >= defaultAuctionBidPeriod, "Invalid auction bid period.");
 
-        address[] memory recipients = new address[](
-            _defaultFee > 0 && _defaultFeeRecipient != address(0) 
-            ? _splitFeeRecipients[_nftAddress] != address(0) 
-            ? _feeRecipients.length + 2 
-            : _feeRecipients.length + 1
-            : _feeRecipients.length
-        );
-        uint256[] memory percentages = new uint256[](
-            _defaultFee > 0 && _defaultFeeRecipient != address(0) 
-            ? _splitFeeRecipients[_nftAddress] != address(0) 
-            ? _feeRecipients.length + 2 
-            : _feeRecipients.length + 1
-            : _feeRecipients.length
-        );
-        for (uint i = 0; i < _feeRecipients.length; i++) {
-            recipients[i] = _feeRecipients[i];
-            percentages[i] = _feePercentages[i];
-        }
-        if (_defaultFee > 0 && _defaultFeeRecipient != address(0)) {
-            recipients[recipients.length - 1] = _defaultFeeRecipient;
-            percentages[percentages.length - 1] = _splitFeeRecipients[_nftAddress] != address(0) ? _defaultFee / 2 : _defaultFee;
-            if (_splitFeeRecipients[_nftAddress] != address(0)) {
-                recipients[recipients.length - 2] = _splitFeeRecipients[_nftAddress];
-                percentages[recipients.length - 2] = _defaultFee / 2;
-            }
-        }
+        (uint256[] memory percentages, address[] memory recipients) = _getRecipientsAndFees(_nftAddress, _feePercentages, _feeRecipients);
         
         // Create the auction
         nftAuctions[auctionHash].nftAddress = _nftAddress;
@@ -283,32 +258,8 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
         require(_feeRecipients.length == _feePercentages.length, "Invalid fees.");
         require(msg.sender != _whitelistedBuyer, "Whitelisted buyer matches the seller.");
 
-        address[] memory recipients = new address[](
-            _defaultFee > 0 && _defaultFeeRecipient != address(0) 
-            ? _splitFeeRecipients[_nftAddress] != address(0) 
-            ? _feeRecipients.length + 2 
-            : _feeRecipients.length + 1
-            : _feeRecipients.length
-        );
-        uint256[] memory percentages = new uint256[](
-            _defaultFee > 0 && _defaultFeeRecipient != address(0) 
-            ? _splitFeeRecipients[_nftAddress] != address(0) 
-            ? _feeRecipients.length + 2 
-            : _feeRecipients.length + 1
-            : _feeRecipients.length
-        );
-        for (uint i = 0; i < _feeRecipients.length; i++) {
-            recipients[i] = _feeRecipients[i];
-            percentages[i] = _feePercentages[i];
-        }
-        if (_defaultFee > 0 && _defaultFeeRecipient != address(0)) {
-            recipients[recipients.length - 1] = _defaultFeeRecipient;
-            percentages[percentages.length - 1] = _splitFeeRecipients[_nftAddress] != address(0) ? _defaultFee / 2 : _defaultFee;
-            if (_splitFeeRecipients[_nftAddress] != address(0)) {
-                recipients[recipients.length - 2] = _splitFeeRecipients[_nftAddress];
-                percentages[recipients.length - 2] = _defaultFee / 2;
-            }
-        }
+        (uint256[] memory percentages, address[] memory recipients) = _getRecipientsAndFees(_nftAddress, _feePercentages, _feeRecipients);
+
         nftAuctions[saleHash].nftAddress = _nftAddress;
         nftAuctions[saleHash].tokenIds = _tokenIds;
         nftAuctions[saleHash].feeRecipients = recipients;
@@ -577,6 +528,43 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
     function _resetBids(bytes32 auctionHash) internal {
         nftAuctions[auctionHash].nftHighestBidder = address(0);
         nftAuctions[auctionHash].nftHighestBid = 0;
+    }
+
+    function _getRecipientsAndFees(address _nftAddress, uint256[] memory _feePercentages, address[] memory _feeRecipients) internal view returns (uint256[] memory, address[] memory) {
+        address[] memory recipients = new address[](
+            _defaultFee > 0 && _defaultFeeRecipient != address(0) 
+            ? _splitFeeRecipients[_nftAddress] != address(0) 
+            ? _feeRecipients.length + 2 
+            : _feeRecipients.length + 1
+            : _feeRecipients.length
+        );
+        uint256[] memory percentages = new uint256[](
+            _defaultFee > 0 && _defaultFeeRecipient != address(0) 
+            ? _splitFeeRecipients[_nftAddress] != address(0) 
+            ? _feeRecipients.length + 2 
+            : _feeRecipients.length + 1
+            : _feeRecipients.length
+        );
+        for (uint i = 0; i < _feeRecipients.length; i++) {
+            recipients[i] = _feeRecipients[i];
+            percentages[i] = _feePercentages[i];
+        }
+        if (_defaultFee > 0 && _defaultFeeRecipient != address(0)) {
+            recipients[recipients.length - 1] = _defaultFeeRecipient;
+            percentages[percentages.length - 1] = _splitFeeRecipients[_nftAddress] != address(0) ? _defaultFee / 2 : _defaultFee;
+            if (_splitFeeRecipients[_nftAddress] != address(0)) {
+                recipients[recipients.length - 2] = _splitFeeRecipients[_nftAddress];
+                percentages[recipients.length - 2] = _defaultFee / 2;
+            }
+        }
+
+        uint256 totalPercentages = 0;
+        for (uint256 k = 0; k < percentages.length; k++) {
+            totalPercentages += percentages[k];
+        }
+        require(totalPercentages < 1e18, "Invalid percentages.");
+
+        return (percentages, recipients);
     }
 
     /** ERC-721 receiver methods */
