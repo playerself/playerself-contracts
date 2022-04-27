@@ -333,7 +333,7 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
             return true;
         }
         //if the NFT is up for auction, the bid needs to be a % higher than the previous bid
-        uint256 bidIncreaseAmount = (nftAuctions[hash].nftHighestBid * (1e18 + _getBidIncreasePercentage(hash))) /1e18;
+        uint256 bidIncreaseAmount = (nftAuctions[hash].nftHighestBid * (1e18 + _getBidIncreasePercentage(hash))) / 1e18;
         return msg.value >= bidIncreaseAmount;
     }
     

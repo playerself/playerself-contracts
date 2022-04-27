@@ -228,11 +228,12 @@ describe("Playerself Auction", function () {
   let addr3;
   let feeRecipient;
   let customFeeRecipient;
+  let auctionFeeRecipient;
   let addrs;
   let nftStartingBalances = {};
 
   beforeEach(async function () {
-    [owner, addr1, addr2, addr3, feeRecipient, customFeeRecipient, ...addrs] = await ethers.getSigners();
+    [owner, addr1, addr2, addr3, feeRecipient, customFeeRecipient, auctionFeeRecipient, ...addrs] = await ethers.getSigners();
 
     PlayerselfRegistry = await ethers.getContractFactory("PlayerselfRegistry");
     registry = await PlayerselfRegistry.connect(owner).deploy();
@@ -1257,6 +1258,64 @@ describe("Playerself Auction", function () {
     expect(parseInt(endOwnerBalance.toString())).to.greaterThan(parseInt(startingOwnerBalance.toString()));
     expect(parseInt(endFeeRecipientBalance.toString())).to.greaterThan(parseInt(startingFeeRecipientBalance.toString()));
     expect(parseInt(endBalance.toString())).to.greaterThan(parseInt(startingBalance.toString()));
+  });
+  it("Should allow extra fee recipients on sales", async function () {
+    const setFeeRecipientTx = await auction.connect(owner).setFeeRecipient(
+      playerself.address,
+      customFeeRecipient.address,
+    );
+    await setFeeRecipientTx.wait();
+
+    const startingBalance = await ethers.provider.getBalance(customFeeRecipient.address);
+    const startingFeeRecipientBalance = await ethers.provider.getBalance(feeRecipient.address);
+    const startingExtraFeeRecipientBalance = await ethers.provider.getBalance(auctionFeeRecipient.address);
+    const startingOwnerBalance = await ethers.provider.getBalance(owner.address);
+
+    const createSaleTx = await auction.connect(owner).createSale(
+      playerself.address,
+      [nftStartingBalances[owner.address][0]],
+      ethers.utils.parseEther("1"),
+      addr1.address,
+      [auctionFeeRecipient.address],
+      [ethers.utils.parseEther("0.05")],
+    )
+    const receipt = await createSaleTx.wait();
+    const saleHash = receipt.events?.filter((x) => x.event === 'NftSaleCreated')[0].args.saleHash;
+
+    const bidTx = await auction.connect(addr1).makeBid(
+      saleHash, 
+      { value: ethers.utils.parseEther("1") }
+    );
+    await bidTx.wait();
+
+    const soldSale = await auction.connect(owner).nftAuctions(saleHash);
+    const tokensAndFees = await auction.connect(owner).getTokensAndFees(saleHash);
+
+    expect(soldSale.nftAddress).to.equal(VOID_ADDRESS);
+    expect(soldSale.nftHighestBidder).to.equal(VOID_ADDRESS);
+    expect(soldSale.nftSeller).to.equal(VOID_ADDRESS);
+    expect(soldSale.whitelistedBuyer).to.equal(VOID_ADDRESS);
+    expect(soldSale.auctionBidPeriod).to.equal(0);
+    expect(soldSale.auctionEnd).to.equal(0);
+    expect(parseInt(soldSale.minPrice)).to.equal(0);
+    expect(parseInt(soldSale.buyNowPrice)).to.equal(0);
+    expect(parseInt(soldSale.nftHighestBid)).to.equal(0);
+    expect(tokensAndFees[0].length).to.equal(0);
+    expect(tokensAndFees[1].length).to.equal(0);
+    expect(tokensAndFees[2].length).to.equal(0);
+
+    const endOwnerBalance = await ethers.provider.getBalance(owner.address);
+
+    const endFeeRecipientBalance = await ethers.provider.getBalance(feeRecipient.address);
+
+    const endBalance = await ethers.provider.getBalance(customFeeRecipient.address);
+
+    const endExtraFeeRecipientBalance = await ethers.provider.getBalance(auctionFeeRecipient.address)
+
+    expect(parseInt(endOwnerBalance.toString())).to.greaterThan(parseInt(startingOwnerBalance.toString()));
+    expect(parseInt(endFeeRecipientBalance.toString())).to.greaterThan(parseInt(startingFeeRecipientBalance.toString()));
+    expect(parseInt(endBalance.toString())).to.greaterThan(parseInt(startingBalance.toString()));
+    expect(parseInt(endExtraFeeRecipientBalance.toString())).to.greaterThan(parseInt(startingExtraFeeRecipientBalance.toString()));
   });
   it("[ERC-721] Should allow an address to create a new auction with 1 NFT", async function () {
     const createAuctionTx = await auction.connect(owner).createNftAuction(
