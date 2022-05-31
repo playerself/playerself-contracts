@@ -53,6 +53,8 @@ contract PlayerselfAuction is IERC721Receiver, IERC1155Receiver {
      */
     constructor(address _registry, address defaultFeeRecipient, uint256 defaultFee) {
         require(_registry != address(0), "NFT address cannot be address(0).");
+        require(defaultFeeRecipient != address(0), "Invalid default fee recipient.");
+        require(defaultFee < 1e18, "Invalid default fee.");
         defaultBidIncreasePercentage = 1e16;
         defaultAuctionBidPeriod = 86400; // 1 day
         minimumSettableIncreasePercentage = 1e16;
